@@ -202,7 +202,7 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisCount: 2,
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
-            childAspectRatio: 1.3,
+            childAspectRatio: 1.1,
             children: [
               DashboardCard(
                 title: 'Tổng số cây',
