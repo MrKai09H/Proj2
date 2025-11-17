@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "99119582981",
+    "firebase_url": "https://uddd-e0e1f-default-rtdb.firebaseio.com",
+    "project_id": "uddd-e0e1f",
+    "storage_bucket": "uddd-e0e1f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:99119582981:android:bbb5227c5a17b31fa5716c",
+        "android_client_info": {
+          "package_name": "com.example.mobile_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDn7FsL9qjT-I_We3UaO7GaZaoZijE71WY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:99119582981:android:8f06cd69fd6cc1f3a5716c",
+        "android_client_info": {
+          "package_name": "com.example.plant_care_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDn7FsL9qjT-I_We3UaO7GaZaoZijE71WY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
