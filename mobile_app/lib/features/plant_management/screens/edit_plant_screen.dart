@@ -1,8 +1,12 @@
+import 'dart:io'; // <--- 1. Import thư viện IO
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+
+// Import các file trong dự án
 import '../../../providers/plant_provider.dart';
 import '../../../models/plant_model.dart';
+import '../../../services/firebase/storage_service.dart'; // <--- 2. Import StorageService
 import '../widgets/plant_form_field.dart';
 import '../widgets/image_picker_widget.dart';
 import '../widgets/date_picker_field.dart';
@@ -27,6 +31,9 @@ class _EditPlantScreenState extends State<EditPlantScreen> {
   final _speciesController = TextEditingController();
   final _descriptionController = TextEditingController();
   
+  // Khởi tạo service
+  final _storageService = StorageService();
+
   DateTime? _plantedDate;
   XFile? _pickedImage;
   String? _existingImageUrl;
@@ -40,17 +47,26 @@ class _EditPlantScreenState extends State<EditPlantScreen> {
   }
 
   void _loadPlantData() {
-    final plantProvider = context.read<PlantProvider>();
-    _plant = plantProvider.plants.firstWhere(
-      (p) => p.id == widget.plantId,
-      orElse: () => throw Exception('Plant not found'),
-    );
+    // Lấy dữ liệu cây từ Provider để điền vào form
+    try {
+      final plantProvider = context.read<PlantProvider>();
+      _plant = plantProvider.plants.firstWhere(
+        (p) => p.id == widget.plantId,
+        orElse: () => throw Exception('Plant not found'),
+      );
 
-    _nameController.text = _plant!.name;
-    _speciesController.text = _plant!.species;
-    _descriptionController.text = _plant!.description ?? '';
-    _plantedDate = _plant!.plantedDate;
-    _existingImageUrl = _plant!.imageUrl;
+      _nameController.text = _plant!.name;
+      _speciesController.text = _plant!.species;
+      _descriptionController.text = _plant!.description ?? '';
+      _plantedDate = _plant!.plantedDate;
+      _existingImageUrl = _plant!.imageUrl;
+    } catch (e) {
+      // Xử lý trường hợp không tìm thấy cây (hiếm khi xảy ra nếu luồng đúng)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+         Navigator.pop(context);
+         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Không tìm thấy cây này!")));
+      });
+    }
   }
 
   @override
@@ -76,12 +92,25 @@ class _EditPlantScreenState extends State<EditPlantScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // TODO: Upload new image if changed (Hiệp will implement)
-      String? imageUrl = _existingImageUrl;
+      // --- LOGIC UPLOAD ẢNH KHI SỬA ---
+      String? imageUrl = _existingImageUrl; // Mặc định giữ nguyên ảnh cũ
+
+      // Nếu người dùng có chọn ảnh mới -> Upload ảnh mới
       if (_pickedImage != null) {
-        // imageUrl = await uploadImage(_pickedImage!);
-        imageUrl = 'https://placeholder.com/plant-updated.jpg';
+        File imageFile = File(_pickedImage!.path);
+        
+        // Tạo tên file mới (dùng timestamp để tránh cache)
+        String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+        String path = 'plants/${_plant!.userId}/$timestamp.jpg';
+        
+        // Upload
+        String? uploadedUrl = await _storageService.uploadImage(path, imageFile);
+        
+        if (uploadedUrl != null) {
+          imageUrl = uploadedUrl; // Cập nhật URL mới
+        }
       }
+      // --------------------------------
 
       final updatedPlant = _plant!.copyWith(
         name: _nameController.text.trim(),
@@ -90,7 +119,7 @@ class _EditPlantScreenState extends State<EditPlantScreen> {
             ? null
             : _descriptionController.text.trim(),
         plantedDate: _plantedDate!,
-        imageUrl: imageUrl,
+        imageUrl: imageUrl, // Sử dụng URL (mới hoặc cũ)
         updatedAt: DateTime.now(),
       );
 
@@ -99,33 +128,31 @@ class _EditPlantScreenState extends State<EditPlantScreen> {
         updatedPlant,
       );
 
-      if (mounted) {
-        setState(() => _isLoading = false);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
 
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Đã cập nhật thông tin cây'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.pop(context);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Lỗi khi cập nhật'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
+      if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi: $e')),
+          const SnackBar(
+            content: Text('Đã cập nhật thông tin cây'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context); // Quay lại màn hình trước
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Lỗi khi cập nhật'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lỗi: $e')),
+      );
     }
   }
 
@@ -135,7 +162,7 @@ class _EditPlantScreenState extends State<EditPlantScreen> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Xác nhận xóa'),
-        content: Text('Bạn có chắc chắn muốn xóa "${_plant!.name}"?'),
+        content: Text('Bạn có chắc chắn muốn xóa "${_plant?.name ?? 'cây này'}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -145,6 +172,7 @@ class _EditPlantScreenState extends State<EditPlantScreen> {
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
             ),
             child: const Text('Xóa'),
           ),
@@ -155,35 +183,41 @@ class _EditPlantScreenState extends State<EditPlantScreen> {
     if (confirmed == true && mounted) {
       setState(() => _isLoading = true);
       
-final success = await context.read<PlantProvider>().deletePlant(widget.plantId);      
-      if (mounted) {
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Đã xóa cây'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.pop(context);
-        } else {
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Lỗi khi xóa cây'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+      final success = await context.read<PlantProvider>().deletePlant(widget.plantId);      
+      
+      if (!mounted) return;
+      
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Đã xóa cây'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Pop 2 lần: 
+        // 1. Đóng EditScreen
+        // 2. Đóng PlantDetailScreen (để về Home, tránh lỗi detail ko còn data)
+        Navigator.of(context).pop(); // Pop Edit
+        Navigator.of(context).pop(); // Pop Detail (Về Home)
+      } else {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Lỗi khi xóa cây'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Nếu chưa load được dữ liệu cây (hoặc null), hiện loading hoặc thông báo
     if (_plant == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Chỉnh sửa cây')),
-        body: const Center(child: Text('Không tìm thấy cây')),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -205,9 +239,9 @@ final success = await context.read<PlantProvider>().deletePlant(widget.plantId);
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Image Picker
+            // Image Picker (Hiển thị ảnh cũ nếu chưa chọn ảnh mới)
             ImagePickerWidget(
-              imageUrl: _existingImageUrl,
+              imageUrl: _pickedImage == null ? _existingImageUrl : null,
               onImagePicked: (image) {
                 setState(() {
                   _pickedImage = image;
@@ -304,17 +338,6 @@ final success = await context.read<PlantProvider>().deletePlant(widget.plantId);
               ),
             ),
             const SizedBox(height: 16),
-
-            // Help Text
-            Center(
-              child: Text(
-                '* Trường bắt buộc',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ),
           ],
         ),
       ),

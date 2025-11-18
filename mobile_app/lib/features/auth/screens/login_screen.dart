@@ -101,25 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     return null;
                   },
                 ),
-                
-                // Forgot password (for future)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      // TODO: Implement forgot password
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Chức năng đang phát triển')),
-                      );
-                    },
-                    child: Text(
-                      'Quên mật khẩu?',
-                      style: TextStyle(color: Theme.of(context).primaryColor),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                
+                const SizedBox(height: 32),
                 // Login button
                 Consumer<AuthProvider>(
                   builder: (context, authProvider, _) {

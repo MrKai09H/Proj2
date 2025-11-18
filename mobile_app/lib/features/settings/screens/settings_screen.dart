@@ -24,12 +24,6 @@ class SettingsScreen extends StatelessWidget {
                   user?.name != null && user!.name.isNotEmpty;
               return ListTile(
                 leading: CircleAvatar(
-                  // --- LỖI Ở ĐÂY ---
-                  // BẠN ĐANG TRUYỀN 1 CHUỖI TRỰC TIẾP VÀO CIRCLEAVATAR
-                  // hasValidName ? user.name![0].toUpperCase() : 'U', // <-- Lỗi
-
-                  // --- ĐÂY LÀ CÁCH SỬA ---
-                  // BẠN CẦN BỌC CHUỖI ĐÓ TRONG WIDGET TEXT VÀ GÁN VÀO `child`
                   child: Text(
                     hasValidName ? user.name![0].toUpperCase() : 'U',
                   ),
@@ -41,16 +35,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           const Divider(),
 
-          // Notifications
-          ListTile(
-            leading: const Icon(Icons.notifications),
-            title: const Text('Thông báo'),
-            subtitle: const Text('Cấu hình thông báo và cảnh báo'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              // TODO: Navigate to notification settings
-            },
-          ),
+          // --- ĐÃ XÓA MỤC THÔNG BÁO ---
 
           // Language
           ListTile(

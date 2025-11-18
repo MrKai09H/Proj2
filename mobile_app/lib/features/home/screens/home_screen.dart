@@ -56,15 +56,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {
-              // TODO: Navigate to notifications
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Thông báo đang phát triển')),
-              );
-            },
-          ),
+          // --- ĐÃ BỎ ICON CHUÔNG TẠI ĐÂY ---
+          
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             onPressed: () {
@@ -210,7 +203,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icons.eco,
                 color: Colors.green,
                 onTap: () {
-                  // Scroll to plant list
+                  // Scroll to plant list logic if needed
                 },
               ),
               DashboardCard(
@@ -245,6 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
+              // 1. Nhật ký
               Expanded(
                 child: QuickActionButton(
                   label: 'Nhật ký',
@@ -267,6 +261,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(width: 12),
+              
+              // 2. Thư viện
               Expanded(
                 child: QuickActionButton(
                   label: 'Thư viện',
@@ -289,17 +285,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              Expanded(
-                child: QuickActionButton(
-                  label: 'Thống kê',
-                  icon: Icons.bar_chart,
-                  color: Colors.teal,
-                  onTap: () {
-                    Navigator.pushNamed(context, AppRoutes.statistics);
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
+              
+              // 3. IoT (Đã bỏ phần Thống kê ở giữa, 3 ô tự cân đối)
               Expanded(
                 child: QuickActionButton(
                   label: 'IoT',
@@ -341,9 +328,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (confirmed == true && mounted) {
-      final authProvider = context.read<AuthProvider>();
-      final userId = authProvider.currentUser?.id ?? '';
-      final success = await context.read<PlantProvider>().deletePlant(plantId);      if (mounted) {
+      final success = await context.read<PlantProvider>().deletePlant(plantId);
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(success ? 'Đã xóa cây' : 'Lỗi khi xóa cây'),

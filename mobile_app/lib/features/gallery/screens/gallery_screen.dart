@@ -1,16 +1,16 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+
+// Import đúng đường dẫn file trong project của bạn
 import '../../../providers/plant_provider.dart';
 import '../../../providers/diary_provider.dart';
 import '../../../services/firebase/storage_service.dart';
-import '../widgets/photo_grid_item.dart';
+import '../widgets/photo_grid_item.dart'; 
 import '../widgets/full_screen_image_viewer.dart';
 import '../../home/widgets/empty_state_widget.dart';
 
-/// Gallery Screen - Assigned to: Hoàng Chí Bằng
-/// Task 1.5: Trang Thư viện ảnh của cây
 class GalleryScreen extends StatefulWidget {
   final String plantId;
 
@@ -29,44 +29,48 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   void initState() {
     super.initState();
+    // Load dữ liệu sau khi build xong frame đầu tiên
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadPhotos();
     });
   }
 
+  // Hàm tải ảnh tổng hợp từ Plant Profile và Diary
   Future<void> _loadPhotos() async {
     if (!mounted) return;
     
     setState(() => _isLoading = true);
 
     try {
-      // Load diary entries to get all photos
       final diaryProvider = context.read<DiaryProvider>();
       final plantProvider = context.read<PlantProvider>();
       
+      // 1. Load danh sách nhật ký từ Firestore
       await diaryProvider.loadEntries(widget.plantId);
       final diaryEntries = diaryProvider.entries;
 
-      // Get plant photo
-      final plant = plantProvider.plants.firstWhere(
-            (p) => p.id == widget.plantId,
-            orElse: () => throw Exception('Plant not found'),
-          );
+      // 2. Lấy thông tin cây để lấy ảnh đại diện (nếu cần)
+      // Lưu ý: Dùng try-catch hoặc firstWhereOrNull để tránh crash nếu cây bị xóa
+      String? plantImage;
+      try {
+        final plant = plantProvider.plants.firstWhere((p) => p.id == widget.plantId);
+        plantImage = plant.imageUrl;
+      } catch (_) {
+        // Không tìm thấy cây, bỏ qua
+      }
 
-      // Collect all photos
+      // 3. Gom tất cả ảnh vào 1 list
       final photos = <String>[];
       
-      // Add plant image if exists
-      final plantImage = plant.imageUrl;
+      // Thêm ảnh đại diện cây (nếu có)
       if (plantImage != null && plantImage.isNotEmpty) {
         photos.add(plantImage);
       }
 
-      // Add all diary images
+      // Thêm ảnh từ các bài nhật ký
       for (final entry in diaryEntries) {
-        final entryImages = entry.imageUrls;
-        if (entryImages.isNotEmpty) {
-          photos.addAll(entryImages);
+        if (entry.imageUrls.isNotEmpty) {
+          photos.addAll(entry.imageUrls);
         }
       }
 
@@ -80,15 +84,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi khi tải ảnh: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Lỗi tải ảnh: $e'), backgroundColor: Colors.red),
         );
       }
     }
   }
 
+  // Hàm thêm ảnh mới
   Future<void> _addPhoto() async {
     final source = await _showImageSourceDialog();
     if (source == null) return;
@@ -105,79 +107,109 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
       setState(() => _isLoading = true);
 
-      // Upload to Firebase Storage
+      // 1. Upload lên Storage
       final file = File(pickedFile.path);
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final imagePath = 'plants/${widget.plantId}/gallery/$timestamp.jpg';
+      
       final imageUrl = await _storageService.uploadImage(imagePath, file);
 
       if (imageUrl == null) {
-        throw Exception('Failed to upload image');
+        throw Exception('Upload thất bại (URL null)');
       }
 
-      // Add to gallery (you might want to create a dedicated gallery collection)
-      // For now, we'll just reload the photos
+      // 2. QUAN TRỌNG: Gọi Provider để lưu URL vào Firestore
+      if (mounted) {
+        await context.read<DiaryProvider>().addPhotoLog(widget.plantId, imageUrl);
+      }
+
+      // 3. Reload UI
       await _loadPhotos();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Đã thêm ảnh vào thư viện'),
-            backgroundColor: Colors.green,
-          ),
+          const SnackBar(content: Text('Đã thêm ảnh thành công!'), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
-      setState(() => _isLoading = false);
+      print(e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi khi thêm ảnh: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  // Hàm xóa ảnh
+  Future<void> _confirmDeletePhoto(int index) async {
+    final imageUrl = _allPhotos[index];
+    
+    // Hỏi xác nhận trước khi xóa
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Xóa ảnh?"),
+        content: const Text("Hành động này không thể hoàn tác."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Hủy")),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Xóa", style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      setState(() => _isLoading = true);
+      
+      // Gọi hàm xóa thông minh trong Provider
+      await context.read<DiaryProvider>().deleteImageFromGallery(widget.plantId, imageUrl);
+      
+      await _loadPhotos(); // Reload lại list
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã xóa ảnh'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi xóa ảnh: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // UI chọn nguồn ảnh (Camera/Thư viện)
   Future<ImageSource?> _showImageSourceDialog() async {
     return showModalBottomSheet<ImageSource>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Chọn nguồn ảnh',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.camera_alt, color: Colors.blue),
-                title: const Text('Chụp ảnh'),
-                onTap: () => Navigator.pop(context, ImageSource.camera),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library, color: Colors.green),
-                title: const Text('Thư viện'),
-                onTap: () => Navigator.pop(context, ImageSource.gallery),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ],
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Chọn nguồn ảnh', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Colors.blue),
+              title: const Text('Chụp ảnh'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Colors.green),
+              title: const Text('Thư viện'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
         ),
       ),
     );
@@ -191,85 +223,41 @@ class _GalleryScreenState extends State<GalleryScreen> {
           imageUrls: _allPhotos,
           initialIndex: index,
           onDelete: (deleteIndex) async {
-            // Note: This is a simplified delete - in production you'd want to
-            // track which photos belong to which entries and delete appropriately
-            await _confirmDeletePhoto(deleteIndex);
+             Navigator.pop(context); // Đóng viewer trước
+             await _confirmDeletePhoto(deleteIndex); // Gọi hàm xóa
           },
         ),
       ),
     );
   }
 
-  Future<void> _confirmDeletePhoto(int index) async {
-    final imageUrl = _allPhotos[index];
-    
-    try {
-      // Delete from Firebase Storage
-      await _storageService.deleteImage(imageUrl);
-      
-      // Reload photos
-      await _loadPhotos();
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Đã xóa ảnh'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi khi xóa ảnh: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final plant = context.read<PlantProvider>().plants.firstWhere(
-          (p) => p.id == widget.plantId,
-          orElse: () => throw Exception('Plant not found'),
-        );
+    // Lấy tên cây an toàn
+    String plantName = "Cây của tôi";
+    try {
+      final plant = context.read<PlantProvider>().plants.firstWhere((p) => p.id == widget.plantId);
+      plantName = plant.name;
+    } catch (_) {}
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        elevation: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Thư viện ảnh'),
-            Text(
-              plant.name,
-              style: const TextStyle(fontSize: 12),
-            ),
+            Text(plantName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
           ],
         ),
         actions: [
-          if (!_isLoading)
+           if (_isLoading)
+             const Center(child: Padding(padding: EdgeInsets.only(right: 16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))))
+           else
             IconButton(
-              icon: const Icon(Icons.add_photo_alternate),
+              icon: const Icon(Icons.add_a_photo),
               onPressed: _addPhoto,
-              tooltip: 'Thêm ảnh',
-            ),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              ),
-            ),
+            )
         ],
       ),
       body: RefreshIndicator(
@@ -286,20 +274,20 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
     if (_allPhotos.isEmpty) {
       return EmptyStateWidget(
-        icon: Icons.photo_library,
-        title: 'Chưa có ảnh',
-        message: 'Hãy thêm ảnh đầu tiên vào\nthư viện của cây này nhé!',
-        buttonText: 'Thêm ảnh',
+        icon: Icons.photo_library_outlined,
+        title: 'Chưa có ảnh nào',
+        message: 'Lưu giữ khoảnh khắc phát triển của cây\nbằng cách thêm ảnh mới.',
+        buttonText: 'Thêm ảnh ngay',
         onButtonPressed: _addPhoto,
       );
     }
 
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
       ),
       itemCount: _allPhotos.length,
       itemBuilder: (context, index) {
@@ -311,11 +299,3 @@ class _GalleryScreenState extends State<GalleryScreen> {
     );
   }
 }
-
-
-
-
-
-
-
-

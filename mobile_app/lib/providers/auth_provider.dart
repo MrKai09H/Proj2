@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../models/user_model.dart';
+import 'package:plant_care_app/models/user_model.dart';
 import '../services/firebase/auth_service.dart';
 
 class AuthProvider with ChangeNotifier {
